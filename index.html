@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Looney Tunes: Letter Dash</title>
+    <style>
+        :root {
+            --lt-orange: #ff8c00;
+            --lt-yellow: #ffcc00;
+            --lt-blue: #0047ab;
+            --ui-font: 'Arial Black', Gadget, sans-serif;
+            --game-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background: radial-gradient(circle, var(--lt-orange) 20%, #8b4513 100%);
+            color: white;
+            font-family: var(--ui-font);
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #ready-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.85); z-index: 9999;
+            display: none; justify-content: center; align-items: center;
+            font-size: 15rem; color: var(--lt-yellow);
+        }
+
+        #editor-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; color: #333; padding: 25px; border-radius: 15px;
+            z-index: 10001; display: none; width: 450px;
+            box-shadow: 0 0 100px rgba(0,0,0,0.8);
+        }
+
+        textarea { width: 100%; height: 250px; margin-bottom: 15px; font-size: 1.2rem; font-family: monospace; }
+
+        #command-strip {
+            height: 100px; background: rgba(0,0,0,0.9);
+            display: flex; justify-content: center; align-items: center; gap: 30px;
+            border-bottom: 5px solid var(--lt-yellow);
+            position: relative; z-index: 5000;
+        }
+
+        .ui-btn {
+            font-size: 1.5rem; padding: 12px 25px;
+            background: var(--lt-blue); color: white;
+            border: 4px solid white; border-radius: 12px; cursor: pointer;
+        }
+
+        #timer-display {
+            font-size: 4rem; color: #ff0000; background: #000;
+            padding: 0 35px; border: 4px solid #ff0000; border-radius: 15px;
+        }
+
+        #game-container { display: flex; width: 100vw; height: calc(100vh - 100px); }
+
+        .player-zone { flex: 1; position: relative; border: 2px solid rgba(255,255,255,0.1); overflow: hidden; }
+
+        .target-header { background: rgba(0,0,0,0.9); padding: 10px; text-align: center; border-bottom: 4px solid var(--lt-yellow); }
+        .target-word { 
+            font-size: 5.5rem; color: var(--lt-orange); 
+            text-shadow: 4px 4px 0 #fff; margin: 5px 0; 
+            min-height: 140px; line-height: 140px; 
+            font-family: var(--game-font); font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .bounce-item {
+            position: absolute; 
+            width: 240px; height: 90px;  
+            background: white; 
+            border: 6px solid var(--lt-blue); 
+            border-radius: 15px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            text-align: center;
+            font-family: var(--game-font);
+            font-weight: bold;
+            color: var(--lt-blue); 
+            cursor: pointer; 
+            z-index: 10;
+            overflow: hidden;
+            box-sizing: border-box;
+            padding: 5px;
+            font-size: 1.8rem; 
+            white-space: nowrap; 
+        }
+
+        .freeze-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,139,0.9); display: none; justify-content: center; align-items: center; font-size: 5rem; z-index: 100; }
+
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--lt-orange); z-index: 9000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ready-overlay">3</div>
+
+    <div id="start-screen">
+        <h1 style="font-size: 6rem; margin-bottom: 30px; text-shadow: 6px 6px #8b4513;">LOONEY DASH</h1>
+        <button class="ui-btn" style="font-size: 3.5rem; padding: 25px 80px;" onclick="prepareGame()">START GAME</button>
+        <button class="ui-btn" style="margin-top: 40px;" onclick="openEditor()">EDIT WORD LIST</button>
+    </div>
+
+    <div id="editor-modal">
+        <h2 style="margin-top:0">Cyber Editor</h2>
+        <p>Format: <b>Target,Match</b> (One per line)</p>
+        <textarea id="vocab-input">Apple,apple
+A red car,a red car
+Banana,香蕉很甜
+Cherry,cherry
+Date,date
+Eat now,eat now
+Food,food
+Green,green
+Hello,這是一個測試
+Ice,ice
+Jump high,jump high
+Kite,kite
+Look!,look!
+Moon,moon
+New,new
+Orange,orange
+Play game,play game
+Quickly,quickly
+Rain,rain
+Sun,sun</textarea>
+        <div style="display:flex; gap:10px;">
+            <button class="ui-btn" style="flex:1" onclick="applyEdits()">SAVE CHANGES</button>
+            <button class="ui-btn" style="flex:1; background:#666;" onclick="closeEditor()">CANCEL</button>
+        </div>
+    </div>
+
+    <div id="command-strip">
+        <div id="timer-display">105</div>
+        <button class="ui-btn" onclick="prepareGame()">RESTART</button>
+        <button class="ui-btn" onclick="openEditor()">EDIT WORDS</button>
+    </div>
+
+    <div id="game-container">
+        <div class="player-zone" id="p1-zone">
+            <div class="target-header">
+                <div style="color:var(--lt-yellow)">PLAYER 1 | SCORE: <span id="p1-score">0</span></div>
+                <div class="target-word" id="p1-target"></div>
+            </div>
+            <div class="freeze-overlay" id="p1-freeze">STOP!</div>
+        </div>
+        <div class="player-zone" id="p2-zone">
+            <div class="target-header">
+                <div style="color:var(--lt-yellow)">PLAYER 2 | SCORE: <span id="p2-score">0</span></div>
+                <div class="target-word" id="p2-target"></div>
+            </div>
+            <div class="freeze-overlay" id="p2-freeze">STOP!</div>
+        </div>
+    </div>
+
+<script>
+    let currentVocab = [];
+    let timeLeft = 105;
+    let mainTimer;
+    let gameRunning = false;
+    let p1Data = { score: 0, target: '', items: [] };
+    let p2Data = { score: 0, target: '', items: [] };
+
+    const ITEM_WIDTH = 240;
+    const ITEM_HEIGHT = 90;
+
+    // AUDIO CONTEXT
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(type) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+
+        if (type === 'correct') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(523.25, now); // C5
+            osc.frequency.exponentialRampToValueAtTime(1046.5, now + 0.1); // C6
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        } else if (type === 'wrong') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(110, now); // A2
+            osc.frequency.linearRampToValueAtTime(55, now + 0.3); // A1
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+        }
+    }
+
+    window.onload = () => { parseVocab(); };
+
+    function openEditor() { document.getElementById('editor-modal').style.display = 'block'; }
+    function closeEditor() { document.getElementById('editor-modal').style.display = 'none'; }
+
+    function parseVocab() {
+        const input = document.getElementById('vocab-input').value;
+        const lines = input.split('\n');
+        const newVocab = [];
+        lines.forEach(line => {
+            const parts = line.split(',');
+            if(parts.length >= 2) {
+                const t = parts[0].trim();
+                const c = parts[1].trim();
+                if(t !== "" && c !== "") newVocab.push({ target: t, choice: c });
+            }
+        });
+        if(newVocab.length > 0) currentVocab = newVocab.slice(0, 20);
+    }
+
+    function applyEdits() {
+        parseVocab();
+        closeEditor();
+        prepareGame();
+    }
+
+    function clearOldItems() {
+        [p1Data, p2Data].forEach(data => {
+            if(data.items) {
+                data.items.forEach(item => {
+                    if(item.el && item.el.parentNode) item.el.parentNode.removeChild(item.el);
+                });
+            }
+            data.items = [];
+        });
+        document.getElementById('p1-target').innerText = "";
+        document.getElementById('p2-target').innerText = "";
+    }
+
+    function prepareGame() {
+        gameRunning = false;
+        clearInterval(mainTimer);
+        document.getElementById('start-screen').style.display = 'none';
+        clearOldItems();
+        p1Data.score = 0; p2Data.score = 0;
+        updateScoreUI();
+        timeLeft = 105;
+        document.getElementById('timer-display').innerText = timeLeft;
+
+        const readyEl = document.getElementById('ready-overlay');
+        readyEl.style.display = 'flex';
+        let count = 3;
+        readyEl.innerText = count;
+
+        const countdownInterval = setInterval(() => {
+            count--;
+            if (count > 0) {
+                readyEl.innerText = count;
+            } else {
+                clearInterval(countdownInterval);
+                readyEl.style.display = 'none';
+                startActivePlay();
+            }
+        }, 1000);
+    }
+
+    function startActivePlay() {
+        gameRunning = true;
+        setupRound('p1');
+        setupRound('p2');
+        mainTimer = setInterval(() => {
+            timeLeft--;
+            document.getElementById('timer-display').innerText = timeLeft;
+            if (timeLeft <= 0) endGame();
+        }, 1000);
+    }
+
+    function setupRound(player) {
+        if(!gameRunning || currentVocab.length === 0) return;
+        const zone = document.getElementById(`${player}-zone`);
+        const data = player === 'p1' ? p1Data : p2Data;
+        data.items.forEach(item => { if(item.el.parentNode) item.el.parentNode.removeChild(item.el); });
+        data.items = [];
+
+        const pair = currentVocab[Math.floor(Math.random() * currentVocab.length)];
+        data.target = pair;
+        document.getElementById(`${player}-target`).innerText = pair.target;
+
+        let numChoices = Math.min(currentVocab.length, 7);
+        let choices = [pair.choice];
+        let pool = currentVocab.map(v => v.choice);
+
+        while (choices.length < numChoices) {
+            let r = pool[Math.floor(Math.random() * pool.length)];
+            if (!choices.includes(r)) choices.push(r);
+        }
+
+        choices.sort(() => Math.random() - 0.5).forEach(text => {
+            const div = document.createElement('div');
+            div.className = 'bounce-item';
+            div.innerText = text;
+            zone.appendChild(div);
+            
+            const rect = zone.getBoundingClientRect();
+            const obj = {
+                el: div,
+                x: Math.random() * (rect.width - ITEM_WIDTH - 20),
+                y: 180 + Math.random() * (rect.height - ITEM_HEIGHT - 200),
+                dx: (Math.random() - 0.5) * 12,
+                dy: (Math.random() - 0.5) * 12
+            };
+            
+            div.onpointerdown = (e) => { e.preventDefault(); handleTap(player, text); };
+            data.items.push(obj);
+        });
+    }
+
+    function handleTap(player, clickedText) {
+        if (!gameRunning) return;
+        const data = player === 'p1' ? p1Data : p2Data;
+        if (clickedText === data.target.choice) {
+            playSound('correct'); // PLAY CORRECT SOUND
+            data.score++;
+            updateScoreUI();
+            setupRound(player);
+        } else {
+            playSound('wrong'); // PLAY WRONG SOUND
+            const over = document.getElementById(`${player}-freeze`);
+            over.style.display = 'flex';
+            setTimeout(() => { over.style.display = 'none'; }, 1000);
+        }
+    }
+
+    function updateScoreUI() {
+        document.getElementById('p1-score').innerText = p1Data.score;
+        document.getElementById('p2-score').innerText = p2Data.score;
+    }
+
+    function animate() {
+        if (gameRunning) {
+            ['p1', 'p2'].forEach(player => {
+                const zone = document.getElementById(`${player}-zone`);
+                const data = player === 'p1' ? p1Data : p2Data;
+                const rect = zone.getBoundingClientRect();
+                data.items.forEach(obj => {
+                    obj.x += obj.dx; obj.y += obj.dy;
+                    if (obj.x <= 0 || obj.x >= rect.width - ITEM_WIDTH) obj.dx *= -1;
+                    if (obj.y <= 165 || obj.y >= rect.height - ITEM_HEIGHT) obj.dy *= -1;
+                    obj.el.style.left = obj.x + 'px';
+                    obj.el.style.top = obj.y + 'px';
+                });
+            });
+        }
+        requestAnimationFrame(animate);
+    }
+
+    function endGame() {
+        gameRunning = false;
+        clearInterval(mainTimer);
+        const winText = p1Data.score > p2Data.score ? "P1 WINS!" : (p2Data.score > p1Data.score ? "P2 WINS!" : "TIE!");
+        alert(`GAME OVER!\n${winText}\nFinal: ${p1Data.score} to ${p2Data.score}`);
+        document.getElementById('start-screen').style.display = 'flex';
+    }
+
+    animate();
+</script>
+</body>
+</html>
